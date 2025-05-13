@@ -1,0 +1,1244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snake PVP Battle</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <style>
+        :root {
+            --primary: #6d28d9; /* Purple 700 */
+            --primary-light: #8b5cf6; /* Purple 500 */
+            --primary-dark: #4c1d95; /* Purple 800 */
+            --secondary: #ec4899; /* Pink 500 */
+            --secondary-light: #f472b6; /* Pink 400 */
+            --secondary-dark: #db2777; /* Pink 600 */
+            --accent: #10b981; /* Emerald 500 */
+            --accent-light: #34d399; /* Emerald 400 */
+            --accent-dark: #059669; /* Emerald 600 */
+            --warning: #f59e0b; /* Amber 500 */
+            --dark: #111827; /* Gray 900 */
+            --dark-light: #1f2937; /* Gray 800 */
+            --dark-lighter: #374151; /* Gray 700 */
+            --light: #f3f4f6; /* Gray 100 */
+        }
+        
+        body {
+            background: linear-gradient(135deg, var(--dark), var(--dark-light));
+            color: var(--light);
+        }
+        
+        .game-container {
+            position: relative;
+            width: 600px;
+            height: 600px;
+            margin: 0 auto;
+            border: 4px solid #8b5cf6; /* Purple border */
+            border-radius: 12px;
+            overflow: hidden;
+            background-color: #111827; /* Darker background */
+            box-shadow: 0 0 30px rgba(139, 92, 246, 0.5), inset 0 0 20px rgba(139, 92, 246, 0.2); /* Enhanced purple glow */
+            background-image: radial-gradient(circle at center, #1f2937 0%, #111827 100%); /* Subtle gradient */
+        }
+        
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        
+        #gameCanvas {
+            z-index: 1;
+        }
+        
+        #overlayCanvas {
+            z-index: 2;
+            pointer-events: none;
+        }
+        
+        .snake-head {
+            border-radius: 50%;
+        }
+        
+        .player1 {
+            background-color: var(--primary-light);
+        }
+        
+        .player2 {
+            background-color: var(--secondary);
+        }
+        
+        .food {
+            border-radius: 50%;
+            animation: pulse 1s infinite alternate;
+        }
+        
+        @keyframes pulse {
+            from {
+                transform: scale(0.95);
+                box-shadow: 0 0 0 0 rgba(244, 114, 182, 0.6);
+            }
+            to {
+                transform: scale(1.05);
+                box-shadow: 0 0 15px 5px rgba(244, 114, 182, 0.2);
+            }
+        }
+        
+        .glow {
+            text-shadow: 0 0 15px currentColor;
+        }
+        
+        #connectionStatus {
+            transition: all 0.3s ease;
+            font-weight: bold;
+            letter-spacing: 0.5px;
+        }
+        
+        .connected {
+            background-color: var(--accent);
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+        }
+        
+        .disconnected {
+            background-color: var(--warning);
+            box-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
+        }
+        
+        /* Button styles */
+        button {
+            transition: all 0.2s ease;
+            transform: translateY(0);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
+        }
+        
+        button:active {
+            transform: translateY(1px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: var(--dark-lighter);
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: var(--primary-light);
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--primary);
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen flex flex-col">
+    <header class="bg-opacity-50 backdrop-filter backdrop-blur-lg py-4 px-6 shadow-lg border-b border-purple-800">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-3xl font-bold text-purple-400 glow">🐍 Snake PVP Battle</h1>
+            <div id="connectionStatus" class="px-4 py-2 rounded-full font-semibold disconnected">
+                Waiting for opponent...
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow container mx-auto py-8 px-4">
+        <div id="lobby" class="text-center max-w-md mx-auto">
+            <div class="bg-gradient-to-br from-gray-800 to-purple-900 rounded-xl p-6 shadow-xl mb-8 border border-purple-800">
+                <h2 class="text-2xl font-bold mb-4 text-purple-300">Create or Join a Game</h2>
+                
+                <div class="mb-6">
+                    <label for="roomCode" class="block text-sm font-medium mb-2 text-purple-200">Room Code</label>
+                    <div class="flex">
+                        <input type="text" id="roomCode" class="flex-grow px-4 py-2 rounded-l-lg bg-gray-700 border border-purple-600 focus:outline-none focus:ring-2 focus:ring-purple-500 text-white" placeholder="Enter room code">
+                        <button id="joinRoom" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-r-lg font-medium transition">Join</button>
+                    </div>
+                </div>
+                
+                <div class="mb-4">
+                    <p class="text-pink-300 mb-2">- OR -</p>
+                    <button id="createRoom" class="w-full bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 px-4 py-3 rounded-lg font-medium transition text-white">Create New Game</button>
+                </div>
+                
+                <div id="roomInfo" class="hidden mt-4 p-3 bg-gray-800 bg-opacity-70 rounded-lg border border-purple-500">
+                    <p class="font-mono text-lg text-pink-300" id="displayRoomCode"></p>
+                    <p class="text-sm text-purple-200 mt-1">Share this code with your opponent</p>
+                </div>
+            </div>
+            
+            <!-- Browse Available Games -->
+            <div class="bg-gradient-to-br from-gray-800 to-pink-900 rounded-xl p-6 shadow-xl mb-8 border border-pink-800">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold text-pink-300">Browse Games</h2>
+                    <button id="refreshRooms" class="bg-pink-500 hover:bg-pink-600 px-3 py-1 rounded-lg text-sm transition flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Refresh
+                    </button>
+                </div>
+                
+                <div id="availableRooms" class="max-h-48 overflow-y-auto">
+                    <div class="text-center text-pink-200 py-4" id="noRoomsMessage">No active games found. Create a new game or refresh.</div>
+                    <ul id="roomsList" class="space-y-2"></ul>
+                </div>
+            </div>
+            
+            <div class="bg-gradient-to-br from-gray-800 to-emerald-900 rounded-xl p-6 shadow-xl border border-emerald-800">
+                <h3 class="text-xl font-bold mb-3 text-emerald-300">How to Play</h3>
+                <ul class="text-left space-y-2 text-emerald-100">
+                    <li class="flex items-start">
+                        <span class="text-emerald-400 mr-2">•</span>
+                        <span>Collect food to grow and earn points</span>
+                    </li>
+                    <li class="flex items-start">
+                        <span class="text-emerald-400 mr-2">•</span>
+                        <span>Don't let your head touch the other snake</span>
+                    </li>
+                    <li class="flex items-start">
+                        <span class="text-purple-400 mr-2">•</span>
+                        <span>Player 1 (Purple): WASD or Arrow keys</span>
+                    </li>
+                    <li class="flex items-start">
+                        <span class="text-pink-400 mr-2">•</span>
+                        <span>Player 2 (Pink): WASD or Arrow keys</span>
+                    </li>
+                    <li class="flex items-start">
+                        <span class="text-emerald-400 mr-2">•</span>
+                        <span>First to 10 points wins!</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+        
+        <div id="game" class="hidden">
+            <div class="flex justify-center mb-6">
+                <div class="flex space-x-12 bg-gradient-to-r from-purple-900 to-pink-900 p-4 rounded-xl shadow-lg">
+                    <div class="text-center px-6 py-2 bg-purple-900 bg-opacity-50 rounded-lg">
+                        <div class="text-xl font-bold text-purple-300 glow">Player 1</div>
+                        <div class="text-3xl font-bold text-white" id="score1">0</div>
+                    </div>
+                    <div class="text-center flex flex-col justify-center">
+                        <div class="text-xl font-bold text-pink-300 glow">VS</div>
+                        <div class="text-sm font-medium text-white">First to 10</div>
+                    </div>
+                    <div class="text-center px-6 py-2 bg-pink-900 bg-opacity-50 rounded-lg">
+                        <div class="text-xl font-bold text-pink-300 glow">Player 2</div>
+                        <div class="text-3xl font-bold text-white" id="score2">0</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="game-container">
+                <canvas id="gameCanvas" width="600" height="600"></canvas>
+                <canvas id="overlayCanvas" width="600" height="600"></canvas>
+            </div>
+            
+            <div id="gameOver" class="hidden fixed inset-0 bg-black bg-opacity-80 backdrop-filter backdrop-blur-sm flex items-center justify-center z-50">
+                <div class="bg-gradient-to-br from-gray-900 to-purple-900 rounded-xl p-8 max-w-md w-full text-center shadow-2xl border border-purple-500">
+                    <h2 class="text-3xl font-bold mb-4 text-purple-300 glow" id="winnerText">Player 1 Wins!</h2>
+                    <p class="text-xl mb-6 text-white" id="finalScore">Score: 10 - 5</p>
+                    <button id="playAgain" class="bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 px-6 py-3 rounded-lg font-medium text-lg transition">Play Again</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="bg-gradient-to-r from-purple-900 to-pink-900 py-4 text-center text-white text-sm border-t border-purple-800">
+        <p class="flex items-center justify-center">
+            <span class="text-purple-300 mr-2">🐍</span>
+            <span>Snake PVP Battle - Play with friends anywhere!</span>
+            <span class="text-pink-300 ml-2">🎮</span>
+        </p>
+    </footer>
+
+    <script>
+        // Game constants
+        const GRID_SIZE = 20;
+        const CELL_SIZE = 30;
+        const GAME_WIDTH = 600;
+        const GAME_HEIGHT = 600;
+        const WINNING_SCORE = 10;
+        
+        // Game variables
+        let gameActive = false;
+        let player1 = {
+            snake: [],
+            direction: {x: 1, y: 0},
+            nextDirection: {x: 1, y: 0},
+            score: 0,
+            color: '#8b5cf6', // Purple 500
+            headColor: '#6d28d9' // Purple 700
+        };
+        
+        let player2 = {
+            snake: [],
+            direction: {x: -1, y: 0},
+            nextDirection: {x: -1, y: 0},
+            score: 0,
+            color: '#ec4899', // Pink 500
+            headColor: '#db2777' // Pink 600
+        };
+        
+        let food = [];
+        let gameLoopInterval;
+        let peer;
+        let conn;
+        let isHost = false;
+        let roomCode = '';
+        
+        // Global room tracking
+        const activeRooms = {};
+        
+        // DOM elements
+        const lobbyElement = document.getElementById('lobby');
+        const gameElement = document.getElementById('game');
+        const gameCanvas = document.getElementById('gameCanvas');
+        const overlayCanvas = document.getElementById('overlayCanvas');
+        const gameCtx = gameCanvas.getContext('2d');
+        const overlayCtx = overlayCanvas.getContext('2d');
+        const score1Element = document.getElementById('score1');
+        const score2Element = document.getElementById('score2');
+        const gameOverElement = document.getElementById('gameOver');
+        const winnerTextElement = document.getElementById('winnerText');
+        const finalScoreElement = document.getElementById('finalScore');
+        const playAgainButton = document.getElementById('playAgain');
+        const createRoomButton = document.getElementById('createRoom');
+        const joinRoomButton = document.getElementById('joinRoom');
+        const roomCodeInput = document.getElementById('roomCode');
+        const roomInfoElement = document.getElementById('roomInfo');
+        const displayRoomCodeElement = document.getElementById('displayRoomCode');
+        const connectionStatusElement = document.getElementById('connectionStatus');
+        const refreshRoomsButton = document.getElementById('refreshRooms');
+        const roomsListElement = document.getElementById('roomsList');
+        const noRoomsMessageElement = document.getElementById('noRoomsMessage');
+        
+        // Initialize PeerJS
+        function initializePeer(customId = null) {
+            // Clean up existing peer if any
+            if (peer) {
+                peer.destroy();
+            }
+            
+            // Create new peer with optional custom ID
+            peer = customId ? new Peer(customId) : new Peer();
+            
+            // Set up common event handlers
+            peer.on('open', (id) => {
+                console.log('Peer initialized with ID: ' + id);
+            });
+            
+            peer.on('connection', (connection) => {
+                console.log('Incoming connection from: ' + connection.peer);
+                conn = connection;
+                setupConnection();
+            });
+            
+            peer.on('error', (err) => {
+                console.error('PeerJS error:', err);
+                alert('Connection error: ' + err.message);
+                resetConnection();
+            });
+            
+            return peer;
+        }
+        
+        // Setup connection handlers
+        function setupConnection() {
+            conn.on('open', () => {
+                console.log('Connected to peer');
+                connectionStatusElement.textContent = 'Connected!';
+                connectionStatusElement.classList.remove('disconnected');
+                connectionStatusElement.classList.add('connected');
+                
+                // Start game for both host and client
+                startGame();
+            });
+            
+            conn.on('data', (data) => {
+                handleRemoteData(data);
+            });
+            
+            conn.on('close', () => {
+                console.log('Connection closed');
+                connectionStatusElement.textContent = 'Opponent disconnected';
+                connectionStatusElement.classList.remove('connected');
+                connectionStatusElement.classList.add('disconnected');
+                if (gameActive) {
+                    endGame('Opponent disconnected');
+                }
+            });
+            
+            conn.on('error', (err) => {
+                console.error('Connection error:', err);
+                connectionStatusElement.textContent = 'Connection error';
+                connectionStatusElement.classList.remove('connected');
+                connectionStatusElement.classList.add('disconnected');
+                if (gameActive) {
+                    endGame('Connection error');
+                }
+            });
+        }
+        
+        // Handle incoming data from peer
+        function handleRemoteData(data) {
+            if (!gameActive && data.type !== 'restart') return;
+            
+            switch (data.type) {
+                case 'direction':
+                    if (isHost) {
+                        player2.nextDirection = data.direction;
+                    } else {
+                        player1.nextDirection = data.direction;
+                    }
+                    break;
+                case 'gameState':
+                    if (!isHost) {
+                        // Update game state from host
+                        player1.snake = data.player1.snake;
+                        player1.direction = data.player1.direction;
+                        player1.nextDirection = data.player1.nextDirection;
+                        player1.score = data.player1.score;
+                        
+                        player2.snake = data.player2.snake;
+                        player2.direction = data.player2.direction;
+                        player2.nextDirection = data.player2.nextDirection;
+                        player2.score = data.player2.score;
+                        
+                        food = data.food;
+                        
+                        // Update score display
+                        score1Element.textContent = player1.score;
+                        score2Element.textContent = player2.score;
+                    }
+                    break;
+                case 'gameOver':
+                    endGame(data.message, data.player1Score, data.player2Score);
+                    break;
+                case 'restart':
+                    startGame();
+                    break;
+            }
+        }
+        
+        // Create a new game room
+        createRoomButton.addEventListener('click', () => {
+            // Generate room code immediately
+            roomCode = generateRoomCode();
+            
+            // Display the room code
+            displayRoomCodeElement.textContent = roomCode;
+            roomInfoElement.classList.remove('hidden');
+            
+            // Update status
+            connectionStatusElement.textContent = 'Waiting for opponent...';
+            connectionStatusElement.classList.remove('connected');
+            connectionStatusElement.classList.add('disconnected');
+            
+            // Set as host
+            isHost = true;
+            
+            // Initialize peer with the room code as the ID
+            try {
+                if (peer) {
+                    peer.destroy();
+                }
+                
+                peer = new Peer(roomCode);
+                
+                peer.on('open', (id) => {
+                    console.log('Room created with ID: ' + id);
+                    
+                    // Register the room so others can see it
+                    registerRoom(roomCode);
+                    
+                    // Refresh the rooms list to show our new room
+                    displayAvailableRooms();
+                    
+                    // Keep lobby visible until someone connects
+                    // This allows the user to see and share the room code
+                });
+                
+                peer.on('connection', (connection) => {
+                    console.log('Player connected: ' + connection.peer);
+                    conn = connection;
+                    
+                    // Update room status to playing
+                    updateRoomStatus(roomCode, 'playing');
+                    
+                    // Now switch to game view since opponent has connected
+                    lobbyElement.classList.add('hidden');
+                    gameElement.classList.remove('hidden');
+                    
+                    setupConnection();
+                });
+                
+                peer.on('error', (err) => {
+                    console.error('PeerJS error:', err);
+                    alert('Connection error: ' + err.message);
+                    resetConnection();
+                });
+            } catch (error) {
+                console.error('Failed to create room:', error);
+                alert('Failed to create room: ' + error.message);
+                resetConnection();
+            }
+        });
+        
+        // Helper function to join a room by code
+        function joinRoom(code) {
+            if (!code) {
+                alert('Please enter a room code');
+                return;
+            }
+            
+            roomCode = code.trim().toUpperCase();
+            isHost = false;
+            
+            // Clean up existing peer if any
+            if (peer) {
+                peer.destroy();
+            }
+            
+            // Create new peer and connect to the room
+            peer = new Peer();
+            
+            peer.on('open', (id) => {
+                console.log('Connecting to room: ' + roomCode);
+                conn = peer.connect(roomCode);
+                
+                if (conn) {
+                    setupConnection();
+                    
+                    // Update UI
+                    connectionStatusElement.textContent = 'Connecting...';
+                    lobbyElement.classList.add('hidden');
+                    gameElement.classList.remove('hidden');
+                    
+                    // Update room status to playing
+                    updateRoomStatus(roomCode, 'playing');
+                    
+                    // Refresh the rooms list
+                    displayAvailableRooms();
+                } else {
+                    alert('Could not connect to room: ' + roomCode);
+                }
+            });
+            
+            peer.on('error', (err) => {
+                console.error('PeerJS error:', err);
+                alert('Connection error: ' + err.message);
+                resetConnection();
+            });
+        }
+        
+        // Join an existing game room via the join button
+        joinRoomButton.addEventListener('click', () => {
+            const code = roomCodeInput.value.trim().toUpperCase();
+            joinRoom(code);
+        });
+        
+        // Generate a random room code
+        function generateRoomCode() {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+            let result = '';
+            for (let i = 0; i < 4; i++) {
+                result += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return result;
+        }
+        
+        // Start the game
+        function startGame() {
+            // Reset game state
+            player1 = {
+                snake: [
+                    {x: 5, y: 10},
+                    {x: 4, y: 10},
+                    {x: 3, y: 10}
+                ],
+                direction: {x: 1, y: 0},
+                nextDirection: {x: 1, y: 0},
+                score: 0,
+                color: '#3B82F6',
+                headColor: '#2563EB'
+            };
+            
+            player2 = {
+                snake: [
+                    {x: 15, y: 10},
+                    {x: 16, y: 10},
+                    {x: 17, y: 10}
+                ],
+                direction: {x: -1, y: 0},
+                nextDirection: {x: -1, y: 0},
+                score: 0,
+                color: '#EF4444',
+                headColor: '#DC2626'
+            };
+            
+            food = [];
+            generateFood(3);
+            
+            // Update UI
+            score1Element.textContent = '0';
+            score2Element.textContent = '0';
+            gameOverElement.classList.add('hidden');
+            
+            // Start game loop
+            gameActive = true;
+            if (gameLoopInterval) clearInterval(gameLoopInterval);
+            gameLoopInterval = setInterval(gameLoop, 100);
+            
+            // Set up keyboard controls
+            document.addEventListener('keydown', handleKeyPress);
+        }
+        
+        // Main game loop
+        function gameLoop() {
+            // Update directions
+            player1.direction = {...player1.nextDirection};
+            player2.direction = {...player2.nextDirection};
+            
+            // Only the host handles game logic
+            if (isHost) {
+                // Move snakes
+                moveSnake(player1);
+                moveSnake(player2);
+                
+                // Check for collisions
+                const collision1 = checkCollisions(player1, player2);
+                const collision2 = checkCollisions(player2, player1);
+                
+                if (collision1) {
+                    endGame('Player 2 wins!', player1.score, player2.score + 1);
+                    if (conn && conn.open) {
+                        conn.send({
+                            type: 'gameOver',
+                            message: 'Player 2 wins!',
+                            player1Score: player1.score,
+                            player2Score: player2.score + 1
+                        });
+                    }
+                    return;
+                }
+                
+                if (collision2) {
+                    endGame('Player 1 wins!', player1.score + 1, player2.score);
+                    if (conn && conn.open) {
+                        conn.send({
+                            type: 'gameOver',
+                            message: 'Player 1 wins!',
+                            player1Score: player1.score + 1,
+                            player2Score: player2.score
+                        });
+                    }
+                    return;
+                }
+                
+                // Check for food collection
+                checkFoodCollection(player1);
+                checkFoodCollection(player2);
+                
+                // Sync game state with client
+                if (conn && conn.open) {
+                    conn.send({
+                        type: 'gameState',
+                        player1: {
+                            snake: player1.snake,
+                            direction: player1.direction,
+                            nextDirection: player1.nextDirection,
+                            score: player1.score
+                        },
+                        player2: {
+                            snake: player2.snake,
+                            direction: player2.direction,
+                            nextDirection: player2.nextDirection,
+                            score: player2.score
+                        },
+                        food: food
+                    });
+                }
+            }
+            
+            // Both host and client draw the game
+            drawGame();
+        }
+        
+        // Move a snake
+        function moveSnake(player) {
+            const head = {...player.snake[0]};
+            head.x += player.direction.x;
+            head.y += player.direction.y;
+            
+            // Wrap around screen
+            if (head.x < 0) head.x = GRID_SIZE - 1;
+            if (head.x >= GRID_SIZE) head.x = 0;
+            if (head.y < 0) head.y = GRID_SIZE - 1;
+            if (head.y >= GRID_SIZE) head.y = 0;
+            
+            player.snake.unshift(head);
+            player.snake.pop();
+        }
+        
+        // Check for collisions
+        function checkCollisions(player, opponent) {
+            const head = player.snake[0];
+            
+            // Check wall collision (handled by wrapping)
+            // Check self collision
+            for (let i = 1; i < player.snake.length; i++) {
+                if (player.snake[i].x === head.x && player.snake[i].y === head.y) {
+                    return true;
+                }
+            }
+            
+            // Check opponent collision (only head counts)
+            if (opponent.snake[0].x === head.x && opponent.snake[0].y === head.y) {
+                return true;
+            }
+            
+            return false;
+        }
+        
+        // Check for food collection
+        function checkFoodCollection(player) {
+            const head = player.snake[0];
+            
+            for (let i = 0; i < food.length; i++) {
+                if (food[i].x === head.x && food[i].y === head.y) {
+                    // Add new segment to snake
+                    const tail = {...player.snake[player.snake.length - 1]};
+                    player.snake.push(tail);
+                    
+                    // Remove eaten food
+                    food.splice(i, 1);
+                    
+                    // Add score
+                    player.score++;
+                    
+                    // Update score display
+                    if (player === player1) {
+                        score1Element.textContent = player1.score;
+                    } else {
+                        score2Element.textContent = player2.score;
+                    }
+                    
+                    // Check for win condition
+                    if (player.score >= WINNING_SCORE) {
+                        const winner = player === player1 ? 'Player 1' : 'Player 2';
+                        endGame(`${winner} wins!`, player1.score, player2.score);
+                        if (conn && conn.open) {
+                            conn.send({
+                                type: 'gameOver',
+                                message: `${winner} wins!`,
+                                player1Score: player1.score,
+                                player2Score: player2.score
+                            });
+                        }
+                        return;
+                    }
+                    
+                    // Generate new food
+                    generateFood(1);
+                    
+                    break;
+                }
+            }
+        }
+        
+        // Generate new food
+        function generateFood(count) {
+            // Vibrant food colors that match our theme
+            const foodColors = [
+                '#10b981', // Emerald 500
+                '#34d399', // Emerald 400
+                '#a855f7', // Purple 500
+                '#d946ef', // Fuchsia 500
+                '#f472b6', // Pink 400
+                '#f59e0b', // Amber 500
+            ];
+            
+            for (let i = 0; i < count; i++) {
+                let newFood;
+                let validPosition = false;
+                
+                while (!validPosition) {
+                    newFood = {
+                        x: Math.floor(Math.random() * GRID_SIZE),
+                        y: Math.floor(Math.random() * GRID_SIZE),
+                        color: foodColors[Math.floor(Math.random() * foodColors.length)]
+                    };
+                    
+                    validPosition = true;
+                    
+                    // Check if food is on any snake
+                    for (const segment of player1.snake) {
+                        if (segment.x === newFood.x && segment.y === newFood.y) {
+                            validPosition = false;
+                            break;
+                        }
+                    }
+                    
+                    if (validPosition) {
+                        for (const segment of player2.snake) {
+                            if (segment.x === newFood.x && segment.y === newFood.y) {
+                                validPosition = false;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // Check if food is on existing food
+                    if (validPosition) {
+                        for (const existingFood of food) {
+                            if (existingFood.x === newFood.x && existingFood.y === newFood.y) {
+                                validPosition = false;
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                food.push(newFood);
+            }
+        }
+        
+        // Draw the game
+        function drawGame() {
+            // Clear canvas
+            gameCtx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+            overlayCtx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+            
+            // Draw grid with subtle purple lines
+            gameCtx.strokeStyle = 'rgba(139, 92, 246, 0.15)';
+            gameCtx.lineWidth = 1;
+            
+            for (let x = 0; x <= GAME_WIDTH; x += CELL_SIZE) {
+                gameCtx.beginPath();
+                gameCtx.moveTo(x, 0);
+                gameCtx.lineTo(x, GAME_HEIGHT);
+                gameCtx.stroke();
+            }
+            
+            for (let y = 0; y <= GAME_HEIGHT; y += CELL_SIZE) {
+                gameCtx.beginPath();
+                gameCtx.moveTo(0, y);
+                gameCtx.lineTo(GAME_WIDTH, y);
+                gameCtx.stroke();
+            }
+            
+            // Draw food
+            food.forEach(f => {
+                // Use the food's color or default to emerald if not set
+                gameCtx.fillStyle = f.color || '#10b981';
+                
+                // Draw food with glow effect
+                gameCtx.shadowColor = f.color || '#10b981';
+                gameCtx.shadowBlur = 10;
+                
+                gameCtx.beginPath();
+                gameCtx.arc(
+                    f.x * CELL_SIZE + CELL_SIZE / 2,
+                    f.y * CELL_SIZE + CELL_SIZE / 2,
+                    CELL_SIZE / 2 - 2,
+                    0,
+                    Math.PI * 2
+                );
+                gameCtx.fill();
+                
+                // Reset shadow
+                gameCtx.shadowBlur = 0;
+                
+                // Inner glow
+                overlayCtx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+                overlayCtx.beginPath();
+                overlayCtx.arc(
+                    f.x * CELL_SIZE + CELL_SIZE / 2,
+                    f.y * CELL_SIZE + CELL_SIZE / 2,
+                    CELL_SIZE / 4,
+                    0,
+                    Math.PI * 2
+                );
+                overlayCtx.fill();
+            });
+            
+            // Draw player 1 snake
+            drawSnake(player1);
+            
+            // Draw player 2 snake
+            drawSnake(player2);
+        }
+        
+        // Draw a snake
+        function drawSnake(player) {
+            player.snake.forEach((segment, index) => {
+                const isHead = index === 0;
+                
+                if (isHead) {
+                    // Draw head with different color
+                    gameCtx.fillStyle = player.headColor;
+                } else {
+                    gameCtx.fillStyle = player.color;
+                }
+                
+                if (isHead) {
+                    // Draw rounded head
+                    gameCtx.beginPath();
+                    gameCtx.arc(
+                        segment.x * CELL_SIZE + CELL_SIZE / 2,
+                        segment.y * CELL_SIZE + CELL_SIZE / 2,
+                        CELL_SIZE / 2 - 1,
+                        0,
+                        Math.PI * 2
+                    );
+                    gameCtx.fill();
+                    
+                    // Draw eyes
+                    const eyeOffsetX = player.direction.x !== 0 ? 0 : 4 * (player.direction.y > 0 ? 1 : -1);
+                    const eyeOffsetY = player.direction.y !== 0 ? 0 : 4 * (player.direction.x > 0 ? 1 : -1);
+                    
+                    gameCtx.fillStyle = 'white';
+                    gameCtx.beginPath();
+                    gameCtx.arc(
+                        segment.x * CELL_SIZE + CELL_SIZE / 2 - eyeOffsetX,
+                        segment.y * CELL_SIZE + CELL_SIZE / 2 - eyeOffsetY,
+                        3,
+                        0,
+                        Math.PI * 2
+                    );
+                    gameCtx.fill();
+                    
+                    gameCtx.beginPath();
+                    gameCtx.arc(
+                        segment.x * CELL_SIZE + CELL_SIZE / 2 + eyeOffsetX,
+                        segment.y * CELL_SIZE + CELL_SIZE / 2 + eyeOffsetY,
+                        3,
+                        0,
+                        Math.PI * 2
+                    );
+                    gameCtx.fill();
+                } else {
+                    // Draw body segment
+                    gameCtx.fillRect(
+                        segment.x * CELL_SIZE + 1,
+                        segment.y * CELL_SIZE + 1,
+                        CELL_SIZE - 2,
+                        CELL_SIZE - 2
+                    );
+                    
+                    // Rounded corners
+                    gameCtx.beginPath();
+                    gameCtx.roundRect(
+                        segment.x * CELL_SIZE + 1,
+                        segment.y * CELL_SIZE + 1,
+                        CELL_SIZE - 2,
+                        CELL_SIZE - 2,
+                        4
+                    );
+                    gameCtx.fill();
+                }
+            });
+        }
+        
+        // Handle keyboard input
+        function handleKeyPress(e) {
+            if (!gameActive) return;
+            
+            if (isHost) {
+                // Host controls player 1 (WASD or Arrow keys)
+                // WASD keys
+                if (e.key === 'w' || e.key === 'W') {
+                    if (player1.direction.y === 0) player1.nextDirection = {x: 0, y: -1};
+                } else if (e.key === 's' || e.key === 'S') {
+                    if (player1.direction.y === 0) player1.nextDirection = {x: 0, y: 1};
+                } else if (e.key === 'a' || e.key === 'A') {
+                    if (player1.direction.x === 0) player1.nextDirection = {x: -1, y: 0};
+                } else if (e.key === 'd' || e.key === 'D') {
+                    if (player1.direction.x === 0) player1.nextDirection = {x: 1, y: 0};
+                }
+                
+                // Arrow keys (also supported for convenience)
+                else if (e.key === 'ArrowUp') {
+                    if (player1.direction.y === 0) player1.nextDirection = {x: 0, y: -1};
+                } else if (e.key === 'ArrowDown') {
+                    if (player1.direction.y === 0) player1.nextDirection = {x: 0, y: 1};
+                } else if (e.key === 'ArrowLeft') {
+                    if (player1.direction.x === 0) player1.nextDirection = {x: -1, y: 0};
+                } else if (e.key === 'ArrowRight') {
+                    if (player1.direction.x === 0) player1.nextDirection = {x: 1, y: 0};
+                }
+            } else {
+                // Client controls player 2 (WASD or Arrow keys)
+                // WASD keys
+                if (e.key === 'w' || e.key === 'W') {
+                    if (player2.direction.y === 0) player2.nextDirection = {x: 0, y: -1};
+                    if (conn && conn.open) {
+                        conn.send({
+                            type: 'direction',
+                            direction: {x: 0, y: -1}
+                        });
+                    }
+                } else if (e.key === 's' || e.key === 'S') {
+                    if (player2.direction.y === 0) player2.nextDirection = {x: 0, y: 1};
+                    if (conn && conn.open) {
+                        conn.send({
+                            type: 'direction',
+                            direction: {x: 0, y: 1}
+                        });
+                    }
+                } else if (e.key === 'a' || e.key === 'A') {
+                    if (player2.direction.x === 0) player2.nextDirection = {x: -1, y: 0};
+                    if (conn && conn.open) {
+                        conn.send({
+                            type: 'direction',
+                            direction: {x: -1, y: 0}
+                        });
+                    }
+                } else if (e.key === 'd' || e.key === 'D') {
+                    if (player2.direction.x === 0) player2.nextDirection = {x: 1, y: 0};
+                    if (conn && conn.open) {
+                        conn.send({
+                            type: 'direction',
+                            direction: {x: 1, y: 0}
+                        });
+                    }
+                }
+                
+                // Arrow keys (also supported for convenience)
+                else if (e.key === 'ArrowUp') {
+                    if (player2.direction.y === 0) player2.nextDirection = {x: 0, y: -1};
+                    if (conn && conn.open) {
+                        conn.send({
+                            type: 'direction',
+                            direction: {x: 0, y: -1}
+                        });
+                    }
+                } else if (e.key === 'ArrowDown') {
+                    if (player2.direction.y === 0) player2.nextDirection = {x: 0, y: 1};
+                    if (conn && conn.open) {
+                        conn.send({
+                            type: 'direction',
+                            direction: {x: 0, y: 1}
+                        });
+                    }
+                } else if (e.key === 'ArrowLeft') {
+                    if (player2.direction.x === 0) player2.nextDirection = {x: -1, y: 0};
+                    if (conn && conn.open) {
+                        conn.send({
+                            type: 'direction',
+                            direction: {x: -1, y: 0}
+                        });
+                    }
+                } else if (e.key === 'ArrowRight') {
+                    if (player2.direction.x === 0) player2.nextDirection = {x: 1, y: 0};
+                    if (conn && conn.open) {
+                        conn.send({
+                            type: 'direction',
+                            direction: {x: 1, y: 0}
+                        });
+                    }
+                }
+            }
+        }
+        
+        // End the game
+        function endGame(message, player1Score, player2Score) {
+            gameActive = false;
+            clearInterval(gameLoopInterval);
+            document.removeEventListener('keydown', handleKeyPress);
+            
+            // Update game over display
+            winnerTextElement.textContent = message;
+            finalScoreElement.textContent = `Score: ${player1Score} - ${player2Score}`;
+            gameOverElement.classList.remove('hidden');
+        }
+        
+        // Play again button
+        playAgainButton.addEventListener('click', () => {
+            gameOverElement.classList.add('hidden');
+            
+            if (conn && conn.open) {
+                conn.send({type: 'restart'});
+            }
+            
+            startGame();
+        });
+        
+        // Reset connection
+        function resetConnection() {
+            if (conn) {
+                conn.close();
+                conn = null;
+            }
+            
+            if (peer) {
+                peer.destroy();
+                peer = null;
+            }
+            
+            connectionStatusElement.textContent = 'Disconnected';
+            connectionStatusElement.classList.remove('connected');
+            connectionStatusElement.classList.add('disconnected');
+            
+            gameElement.classList.add('hidden');
+            lobbyElement.classList.remove('hidden');
+            roomInfoElement.classList.add('hidden');
+        }
+        
+        // No need to initialize peer on page load
+        // We'll initialize when creating or joining a room
+        
+        // Room browsing functionality
+        function registerRoom(roomId) {
+            // In a real implementation, this would send the room ID to a server
+            // For this demo, we'll use localStorage to simulate a server
+            try {
+                // Get existing rooms
+                let rooms = JSON.parse(localStorage.getItem('snakeRooms') || '{}');
+                
+                // Add this room with a timestamp
+                rooms[roomId] = {
+                    id: roomId,
+                    created: Date.now(),
+                    status: 'waiting' // waiting, playing, or finished
+                };
+                
+                // Save back to localStorage
+                localStorage.setItem('snakeRooms', JSON.stringify(rooms));
+                
+                // Update our local tracking
+                activeRooms[roomId] = rooms[roomId];
+                
+                // Clean up old rooms (older than 30 minutes)
+                cleanupOldRooms();
+                
+                console.log('Room registered:', roomId);
+            } catch (error) {
+                console.error('Error registering room:', error);
+            }
+        }
+        
+        function updateRoomStatus(roomId, status) {
+            try {
+                // Get existing rooms
+                let rooms = JSON.parse(localStorage.getItem('snakeRooms') || '{}');
+                
+                // Update status if room exists
+                if (rooms[roomId]) {
+                    rooms[roomId].status = status;
+                    localStorage.setItem('snakeRooms', JSON.stringify(rooms));
+                    
+                    // Update our local tracking
+                    if (activeRooms[roomId]) {
+                        activeRooms[roomId].status = status;
+                    }
+                    
+                    console.log(`Room ${roomId} status updated to ${status}`);
+                }
+            } catch (error) {
+                console.error('Error updating room status:', error);
+            }
+        }
+        
+        function fetchAvailableRooms() {
+            try {
+                // Get rooms from localStorage
+                const rooms = JSON.parse(localStorage.getItem('snakeRooms') || '{}');
+                
+                // Filter to only show waiting rooms
+                const availableRooms = {};
+                for (const [id, room] of Object.entries(rooms)) {
+                    if (room.status === 'waiting') {
+                        availableRooms[id] = room;
+                    }
+                }
+                
+                return availableRooms;
+            } catch (error) {
+                console.error('Error fetching rooms:', error);
+                return {};
+            }
+        }
+        
+        function cleanupOldRooms() {
+            try {
+                // Get existing rooms
+                let rooms = JSON.parse(localStorage.getItem('snakeRooms') || '{}');
+                const now = Date.now();
+                const thirtyMinutes = 30 * 60 * 1000; // 30 minutes in milliseconds
+                
+                // Filter out rooms older than 30 minutes
+                const updatedRooms = {};
+                for (const [id, room] of Object.entries(rooms)) {
+                    if (now - room.created < thirtyMinutes) {
+                        updatedRooms[id] = room;
+                    }
+                }
+                
+                // Save back to localStorage
+                localStorage.setItem('snakeRooms', JSON.stringify(updatedRooms));
+                
+                console.log('Cleaned up old rooms');
+            } catch (error) {
+                console.error('Error cleaning up rooms:', error);
+            }
+        }
+        
+        function displayAvailableRooms() {
+            // Fetch available rooms
+            const rooms = fetchAvailableRooms();
+            
+            // Clear the current list
+            roomsListElement.innerHTML = '';
+            
+            // Show/hide no rooms message
+            if (Object.keys(rooms).length === 0) {
+                noRoomsMessageElement.style.display = 'block';
+                return;
+            }
+            
+            // Hide no rooms message
+            noRoomsMessageElement.style.display = 'none';
+            
+            // Add each room to the list
+            for (const [id, room] of Object.entries(rooms)) {
+                const li = document.createElement('li');
+                li.className = 'bg-gray-700 p-3 rounded flex justify-between items-center';
+                li.innerHTML = `
+                    <span class="font-mono">${id}</span>
+                    <button class="join-room-btn bg-blue-500 hover:bg-blue-600 px-3 py-1 rounded text-sm transition"
+                            data-room-id="${id}">Join</button>
+                `;
+                roomsListElement.appendChild(li);
+                
+                // Add click event to the join button
+                const joinButton = li.querySelector('.join-room-btn');
+                joinButton.addEventListener('click', () => {
+                    roomCodeInput.value = id;
+                    joinRoom(id);
+                });
+            }
+        }
+        
+        // Add event listener to refresh button
+        refreshRoomsButton.addEventListener('click', displayAvailableRooms);
+        
+        // Display available rooms on page load
+        displayAvailableRooms();
+        
+        // Set up a timer to refresh rooms list every 1.5 seconds
+        setInterval(displayAvailableRooms, 1500);
+    </script>
+</body>
+</html>
