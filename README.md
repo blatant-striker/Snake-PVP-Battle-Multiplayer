@@ -2,7 +2,7 @@
 
 A modern, multiplayer Snake game where two players can compete in real-time using peer-to-peer connections.
 
-![Snake PVP Battle](https://i.imgur.com/placeholder.png)
+![Snake PVP Battle](https://imgur.com/a/v83KQLE)
 
 ## Features
 
